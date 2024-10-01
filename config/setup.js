@@ -8,8 +8,9 @@ const config = require('.')
 
 async function databaseSetup () {
   const models = [
-    'Solution', 'Contest', 'News', 'Group', 'Discuss',
+    'Solution', 'Contest', 'News', 'Group', 'Discuss', 'Address',
   ]
+  // 2024年9月30日 添加Address表
   const ps = models.map(async (model) => {
     const item = await ID.findOne({ name: model }).exec()
     if (item != null && item.id >= 0) { return }

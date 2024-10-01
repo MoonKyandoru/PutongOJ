@@ -1,8 +1,28 @@
 const { RateLimit } = require('koa2-ratelimit')
 const { isAdmin, isRoot } = require('./helper')
+const User = require('../models/User')
+const Address = require('../models/Address')
 
 const login = async (ctx, next) => {
-  if (!ctx.session || ctx.session.profile == null) { ctx.throw(401, 'Login required') }
+  if (!ctx.session || ctx.session.profile == null) {// TODO 希望对此部分进行检测, 是否有继续存在的必要
+    delete ctx.session.profile
+    ctx.throw(401, 'Login required')
+  }
+  const user = await User.findOne({ uid: ctx.session.profile.uid }).exec()
+  if (user == null || user.pwd !== ctx.session.profile.pwd) {
+    delete ctx.session.profile
+    ctx.throw(401, 'Login required')
+    // TODO 检测到这部分的内容似乎不会更改页面右上角的登录显示, 希望进行修正
+  } else { // 验证登陆时记录(仅在用户可识别状态下)
+    const updateInfo = await Address.save({
+      userID: ctx.session.profile.uid,
+      activityAddress: ctx.request.ip
+    })
+    console.log(updateInfo)
+    delete updateInfo
+  }
+  if (user.privilege !== ctx.session.profile.privilege)
+    ctx.session.profile.privilege = user.privilege
   await next()
 }
 

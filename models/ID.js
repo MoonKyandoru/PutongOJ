@@ -29,6 +29,7 @@ const IdSchema = mongoose.Schema({
 IdSchema.statics.generateId = function (field = '') {
   // field 只能是以下中的一个
   // 'Problem', 'Solution', 'Contest', 'News', 'Group', 'Discuss', 'Tag'
+  // 2024年9月30日 添加 Address 用作记录用户活动
   field = field.toLocaleLowerCase()
   field = field[0].toLocaleUpperCase() + field.slice(1)
   return this

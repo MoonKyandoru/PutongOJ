@@ -3,7 +3,7 @@ const User = require('../models/User')
 const { generatePwd } = require('../utils/helper')
 
 // 登录
-const login = async (ctx) => {
+const login = async (ctx, next) => {
   const uid = ctx.request.body.uid
   const pwd = generatePwd(ctx.request.body.pwd)
 
@@ -18,11 +18,13 @@ const login = async (ctx) => {
     ctx.throw(400, 'Wrong password')
   }
 
-  ctx.session.profile = only(user, 'uid nick privilege')
+  ctx.session.profile = only(user, 'uid nick privilege pwd')
   ctx.session.profile.verifyContest = []
   ctx.body = {
     profile: ctx.session.profile,
+    address: ctx.request.ip
   }
+  await next(ctx)
 }
 
 // 登出
