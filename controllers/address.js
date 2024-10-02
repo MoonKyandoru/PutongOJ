@@ -20,9 +20,9 @@ const find = async (ctx) => {
     const page = Number.parseInt(opt.page) || 1
     const pageSize = Number.parseInt(opt.pageSize) || 30
 
-    startTime = 0
-    endTime = Date.now()
-    userList = {}
+    let startTime = 0
+    let endTime = Date.now()
+    let userList = {}
     if(opt.cid) {    // 按照contest的 提交+时间范围 查询, 此查询提供给contest内部
         const cid = Number.parseInt(opt.cid)
         try {
