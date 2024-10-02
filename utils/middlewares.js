@@ -14,11 +14,12 @@ const login = async (ctx, next) => {
     ctx.throw(401, 'Login required')
     // TODO 检测到这部分的内容似乎不会更改页面右上角的登录显示, 希望进行修正
   } else { // 验证登陆时记录(仅在用户可识别状态下)
-    const updateInfo = await Address.save({
+    const address = new Address({
       userID: ctx.session.profile.uid,
       activityAddress: ctx.request.ip
     })
-    console.log(updateInfo)
+    const updateInfo = await address.save()
+    // console.log(updateInfo)
     delete updateInfo
   }
   if (user.privilege !== ctx.session.profile.privilege)

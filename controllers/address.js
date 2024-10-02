@@ -1,6 +1,7 @@
 const Address = require("../models/Address")
-const config = require('../config')
 const User = require('../models/User')
+const Contest = require('../models/Contest')
+const { isAdmin } = require('../utils/helper')
 
 const preload = async (ctx) => {
     ctx = {
@@ -12,33 +13,45 @@ const preload = async (ctx) => {
 // 查询所有用户的活动情况
 const find = async (ctx) => {
     // 鉴权
-    // if (!isAdmin(ctx.session.profile) && ctx.session.profile.uid !== ctx.state.user.uid) {
-    //     ctx.throw(400, 'You do not have permission to ask this user\'s information!')
-    // }
+    if (!isAdmin(ctx.session.profile) && ctx.session.profile.uid !== ctx.state.user.uid) {
+        ctx.throw(400, 'You do not have permission to ask this user\'s information!')
+    }
     const opt = ctx.request.query
-    const filter = {}
     const page = Number.parseInt(opt.page) || 1
     const pageSize = Number.parseInt(opt.pageSize) || 30
 
-    filter.privilege = {
-        $in: [ config.privilege.Root, config.privilege.Teacher ],
+    startTime = 0
+    endTime = Date.now()
+    userList = {}
+    if(opt.cid) {    // 按照contest的 提交+时间范围 查询, 此查询提供给contest内部
+        const cid = Number.parseInt(opt.cid)
+        try {
+            const contestInfomation = await Contest.findOne(
+                {cid: cid},
+                'start end ranklist -_id',
+                { lean: true },
+            )
+            startTime = contestInfomation.start
+            endTime = contestInfomation.end
+            userList = contestInfomation.ranklist
+        } catch (err) {
+            ctx.throw(err.message)
+        }
+    } else { // 无限定查询, 此查询提供给全局
+        try {
+            userList = await User
+                .find()
+                .select('uid -_id')
+                .skip((page - 1) * pageSize)
+                .limit(pageSize)
+                .lean()
+                .exec()
+            userList = userList.map(userID => userID.uid)
+        } catch (err) {
+            ctx.throw(err.message)
+        }
     }
-    // 获取用户表单
-    // TODO 增加参加contest的指定
-    const result = await User
-        .find(filter, { _id: 0, uid: 1, nick: 1, privilege: 1})
-        .lean()
-        .exec()
-        
-        
-    const userList = result.map(userID => userID.uid);
-    // console.log('userID', userList)
-
-    // TODO 按照contest查询, 按照时间范围查询
-    const startTime = 0
-    const endTime = Date.now()
-
-
+    
     let addressList = []
     for (let userID of userList){
         const rule = [
@@ -51,38 +64,39 @@ const find = async (ctx) => {
             { $sort: { activityTime: -1 } }, // 按activityTime降序排序
             {
                 $group: {
-                    _id: "$activityAddress",
-                    activities: { $push: "$$ROOT" },
-                    maxTime: { $max: "$activityTime" }
+                    _id: { userID: "$userID", activityAddress: "$activityAddress" },
+                    maxActivityTime: { $max: "$activityTime" },
+                    activity: { $first: "$$ROOT" } // 保留完整的文档
                 }
             },
-            { $unwind: "$activities" },
-            { $replaceRoot: { newRoot: { $mergeObjects: ["$activities", { activityTime: "$maxTime" }] } } },
-            { $sort: { activityTime: -1 } }, 
-            { $limit: 3 }, 
+            { 
+                $replaceRoot: { newRoot: { $mergeObjects: ["$activity", { activityTime: "$maxActivityTime" }] } } 
+            },
+            { $sort: { activityTime: -1 } },
+            { $limit: 3 },
             { $project: {
                 _id: 0,
                 userID: 1,
                 activityAddress: 1,
                 activityTime: 1,
             }}
-        ]
-        
-        const result = await Address.aggregate(rule)
-        console.log(result)
-        addressList.push(result)
+        ];
+        try {
+            const result = await Address.aggregate(rule)
+            addressList.push(result)
+        } catch (err) {
+            ctx.throw(err.message)
+        }
     }
-    // console.log(addressList)
-    
-
+    ctx = { addressList }
 }
 
-// 查询某个用户在某个期间的活动记录 (还未实装)
+// 查询某个用户在某个期间的活动记录
 const findOne = async (ctx) => {
     // 鉴权
-    // if (!isAdmin(ctx.session.profile) && ctx.session.profile.uid !== ctx.state.user.uid) {
-    //     ctx.throw(400, 'You do not have permission to ask this user\'s information!')
-    // }
+    if (!isAdmin(ctx.session.profile) && ctx.session.profile.uid !== ctx.state.user.uid) {
+        ctx.throw(400, 'You do not have permission to ask this user\'s information!')
+    }
     const startTime = ctx.params.startTime || 0
     const endTime = ctx.params.endTime || Date.now()
     const userID = ctx.params.uid
@@ -113,9 +127,8 @@ const findOne = async (ctx) => {
             activityTime: 1,
         }}
     ]
-    
-    const result = await Address.aggregate(rule)
-    // console.log(result)
+    const addressList = await Address.aggregate(rule)
+    ctx = { addressList }
 }
 
 // 活动记录保存, 仅在需要确认用户登录的utils\middlewares.js的login中使用
@@ -125,12 +138,11 @@ const remember = async (ctx) => {
         userID: ctx.session.profile.uid,
         activityAddress: ctx.request.ip
     })
-    console.log(updateInfo)
     delete updateInfo
 }
 
 // 不修改网页内容, 只在登录时调用
-const login = async (ctx, next) => {
+const login = async (ctx) => {
     const userID = ctx.body.profile.uid
     const activityAddress = ctx.body.address
     delete ctx.body.address
@@ -146,7 +158,6 @@ const login = async (ctx, next) => {
     } catch (err) {
         ctx.throw(400, err.message)
     }
-    await next(ctx)
 }
 
 module.exports = {
